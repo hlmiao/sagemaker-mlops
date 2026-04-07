@@ -1,0 +1,3 @@
+#!/bin/bash
+# SageMaker 调用 'serve' 启动推理服务
+exec gunicorn -b 0.0.0.0:8080 --timeout 60 --workers 1 inference:app
