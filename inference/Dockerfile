@@ -1,6 +1,6 @@
 FROM public.ecr.aws/docker/library/python:3.10-slim
 
-RUN pip install --no-cache-dir flask gunicorn
+RUN pip install --no-cache-dir flask gunicorn joblib scikit-learn numpy
 
 COPY inference.py /opt/ml/code/inference.py
 
