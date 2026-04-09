@@ -66,20 +66,39 @@ def _create_sagemaker_model(sm_model_name: str, s3_model_uri: str, model_name: s
 
 
 def _create_endpoint_config(endpoint_config_name: str, sm_model_name: str):
-    """创建 EndpointConfig，实例类型从环境变量读取"""
+    """创建 EndpointConfig，含 Data Capture 配置"""
     instance_type = os.environ.get("ENDPOINT_INSTANCE_TYPE", "ml.m5.large")
     instance_count = int(os.environ.get("ENDPOINT_INSTANCE_COUNT", "1"))
+    data_capture_uri = os.environ.get("DATA_CAPTURE_S3_URI", "")
 
-    sagemaker.create_endpoint_config(
-        EndpointConfigName=endpoint_config_name,
-        ProductionVariants=[{
+    config = {
+        "EndpointConfigName": endpoint_config_name,
+        "ProductionVariants": [{
             "VariantName": "AllTraffic",
             "ModelName": sm_model_name,
             "InitialInstanceCount": instance_count,
             "InstanceType": instance_type,
             "InitialVariantWeight": 1.0,
-        }]
-    )
+        }],
+    }
+
+    # 开启 Data Capture：自动记录推理输入输出到 S3
+    if data_capture_uri:
+        config["DataCaptureConfig"] = {
+            "EnableCapture": True,
+            "InitialSamplingPercentage": 100,
+            "DestinationS3Uri": data_capture_uri,
+            "CaptureOptions": [
+                {"CaptureMode": "Input"},
+                {"CaptureMode": "Output"},
+            ],
+            "CaptureContentTypeHeader": {
+                "JsonContentTypes": ["application/json"],
+            },
+        }
+        print(f"Data Capture enabled: {data_capture_uri}")
+
+    sagemaker.create_endpoint_config(**config)
     print(f"Created EndpointConfig: {endpoint_config_name}")
 
 

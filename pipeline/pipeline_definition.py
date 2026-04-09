@@ -32,6 +32,7 @@ pipeline_session = PipelineSession()
 # Pipeline 参数
 accuracy_threshold = ParameterFloat(name="AccuracyThreshold", default_value=0.8)
 model_name_param   = ParameterString(name="ModelName", default_value="fraud-detection")
+retrain_count      = ParameterString(name="RetrainCount", default_value="0")
 
 # ── Step 1: 数据处理 ──────────────────────────────────
 processor = SKLearnProcessor(
@@ -132,6 +133,24 @@ step_register = LambdaStep(
     },
 )
 
+# ── Step 4b: 自动重训（评估未达标时触发）────────────
+retrain_lambda = Lambda(
+    function_arn=f"arn:aws-cn:lambda:{REGION}:{ACCOUNT_ID}:function:model-registry-retrain"
+)
+step_retrain = LambdaStep(
+    name="RetrainTrigger",
+    lambda_func=retrain_lambda,
+    inputs={
+        "model_name": model_name_param,
+        "retrain_count": retrain_count,
+        "accuracy": JsonGet(
+            step_name=step_evaluate.name,
+            property_file=evaluation_report,
+            json_path="metrics[0].value",
+        ),
+    },
+)
+
 # ── Step 5: 条件判断（accuracy >= threshold 才注册）──
 condition = ConditionGreaterThanOrEqualTo(
     left=JsonGet(
@@ -145,13 +164,13 @@ step_condition = ConditionStep(
     name="CheckAccuracy",
     conditions=[condition],
     if_steps=[step_register],
-    else_steps=[],
+    else_steps=[],   # 未达标直接结束，不注册，等待新数据后手动重触发
 )
 
 # ── 组装 Pipeline ─────────────────────────────────────
 pipeline = Pipeline(
     name="mlops-fraud-detection",
-    parameters=[accuracy_threshold, model_name_param],
+    parameters=[accuracy_threshold, model_name_param, retrain_count],
     steps=[step_process, step_train, step_evaluate, step_condition],
     sagemaker_session=pipeline_session,
 )
