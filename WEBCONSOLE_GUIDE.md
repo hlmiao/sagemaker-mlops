@@ -233,28 +233,54 @@ aws lambda add-permission \
 
 ## 第七阶段：ECR 推理镜像准备
 
+### 7.1 创建 ECR 存储库
+
+**ECR 控制台** → **存储库** → **创建存储库**：
+- 可见性：**私有**
+- 名称：`ml-inference`
+- **创建**
+
+### 7.2 上传推理代码到 JupyterLab
+
+在 SageMaker Studio JupyterLab 中，创建 `inference/` 目录，上传以下三个文件：
+
 ```
 inference/
 ├── Dockerfile
-├── inference.py   ← Flask app（/ping + /invocations）
+├── inference.py   ← Flask app（/ping + /invocations），加载 model.joblib
 └── serve          ← SageMaker 启动脚本（必须有）
 ```
 
+### 7.3 在 JupyterLab Terminal 中构建并推送镜像
+
+打开 Terminal，执行：
+
 ```bash
-aws ecr get-login-password --region cn-northwest-1 | \
+cd inference
+
+# 设置变量（替换 YOUR_ACCOUNT_ID）
+ACCOUNT_ID="YOUR_ACCOUNT_ID"
+REGION="cn-northwest-1"
+REPO_NAME="ml-inference"
+IMAGE_URI="${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com.cn/${REPO_NAME}:latest"
+
+# 登录 ECR
+aws ecr get-login-password --region ${REGION} | \
   docker login --username AWS --password-stdin \
-  YOUR_ACCOUNT_ID.dkr.ecr.cn-northwest-1.amazonaws.com.cn
+  ${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com.cn
 
-# ECR 控制台创建存储库 ml-inference（私有）
+# 构建镜像
+docker build -t ${REPO_NAME} .
 
-docker build -t ml-inference .
-docker tag ml-inference:latest \
-  YOUR_ACCOUNT_ID.dkr.ecr.cn-northwest-1.amazonaws.com.cn/ml-inference:latest
-docker push \
-  YOUR_ACCOUNT_ID.dkr.ecr.cn-northwest-1.amazonaws.com.cn/ml-inference:latest
+# 标记并推送
+docker tag ${REPO_NAME}:latest ${IMAGE_URI}
+docker push ${IMAGE_URI}
+
+echo "镜像推送完成: ${IMAGE_URI}"
 ```
 
 > 基础镜像用 `public.ecr.aws/docker/library/python:3.10-slim`。
+> JupyterLab Space 建议使用 `ml.t3.medium` 或以上实例。
 
 ---
 
